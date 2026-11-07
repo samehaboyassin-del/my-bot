@@ -1,4 +1,4 @@
-import os
+قصصimport os
 import telebot
 import threading
 from flask import Flask
