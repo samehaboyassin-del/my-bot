@@ -16,11 +16,11 @@ def start(message):
 def ai_reply(message):
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=message.text
         )
         bot.reply_to(message, response.text)
     except Exception as e:
-        bot.reply_to(message, "معلش في مشكلة دلوقتي، جرب تاني")
+        bot.reply_to(message, f"الخطأ هو: {e}")
 
 bot.polling(none_stop=True)
