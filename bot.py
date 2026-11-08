@@ -1,6 +1,7 @@
 import telebot
+import os
 
-TOKEN = "حط_التوكن_بتاعك_هنا"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 MY_NUMBER = "01067654540"
@@ -21,16 +22,12 @@ def voice_reply(message):
 @bot.message_handler(func=lambda m: True)
 def all_messages(message):
     text = message.text.lower() if message.text else ""
-
     if "ارسم" in text or "صورة" in text or "رسم" in text:
         bot.reply_to(message, "اهلا وسهلا بيك في بوت سامح، حاضر هرسملك، قولي عايز ترسم ايه بالظبط؟")
-
     elif "سعر" in text or "بكام" in text or "تكلفة" in text:
         bot.reply_to(message, f"اهلا وسهلا بيك في بوت سامح، الاسعار بتختلف على حسب شغلك، كلمنا على {MY_NUMBER} وهنقولك كل التفاصيل")
-
     elif "سلام" in text or "هلا" in text or "ازيك" in text or "اهلا" in text:
         bot.reply_to(message, "اهلا وسهلا بيك في بوت سامح، نورتنا ❤️ اسألني اي حاجة")
-
     else:
         bot.reply_to(message, "اهلا وسهلا بيك في بوت سامح، فهمتك، قولي بقى عايز ايه بالظبط؟ ولو عايز تكلم صاحب البوت دوس /contact")
 
