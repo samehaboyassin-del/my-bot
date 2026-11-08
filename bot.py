@@ -1,5 +1,4 @@
 import os
-import time
 import telebot
 from google import genai
 
@@ -9,7 +8,8 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"]
+# حطينا الاسرع الاول
+MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -17,7 +17,7 @@ def start(message):
 
 @bot.message_handler(func=lambda m: True)
 def ai_reply(message):
-    last_error = ""
+    bot.send_chat_action(message.chat.id, 'typing')
     for model_name in MODELS:
         try:
             response = client.models.generate_content(
@@ -26,10 +26,8 @@ def ai_reply(message):
             )
             bot.reply_to(message, response.text)
             return
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(1)
+        except Exception:
             continue
-    bot.reply_to(message, f"جوجل زحمة دلوقتي، جرب تاني بعد دقيقة.")
+    bot.reply_to(message, "جوجل زحمة دلوقتي، جرب تاني بعد دقيقة.")
 
-bot.polling(none_stop=True)
+bot.polling(none_stop=True, timeout=60)
