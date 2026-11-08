@@ -16,7 +16,7 @@ def start(message):
 def ai_reply(message):
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=message.text
         )
         bot.reply_to(message, response.text)
