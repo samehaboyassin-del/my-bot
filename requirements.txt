@@ -1,4 +1,5 @@
 pyTelegramBotAPI
 google-genai
 edge-tts
+gTTS
 Pillow
