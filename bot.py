@@ -1,6 +1,8 @@
 import os
 import io
 import asyncio
+import requests
+import urllib.parse
 import telebot
 from google import genai
 from PIL import Image
@@ -9,7 +11,6 @@ from google.genai import types
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-# بنستخدم v1beta عشان موديل الصور يشتغل
 client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(api_version="v1beta"))
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
@@ -18,7 +19,6 @@ SYSTEM_PROMPT = """
 كلم سامح دايما بالعامية المصرية، زي "يا غالي، يا معلم، من عيوني، أهو".
 ردك يكون قصير جدا، سطرين او 3 بالكتير، ودمك خفيف، ومتتكلمش فصحى خالص.
 انت دايما بتبعت رد كتابة وبعده فويس بنفس الكلام، اوعى تقول انك بوت كلام بس.
-لو قالك "روحت فين" او "نبدأ من الاول" رد عليه "انا اهو يا غالي، معاك، نبدأ من الاول".
 """
 
 TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
@@ -39,6 +39,17 @@ def make_voice_gtts(text):
     tts = gTTS(text=text, lang='ar', slow=False)
     tts.save("voice.mp3")
 
+def make_image_pollinations(prompt):
+    # ده الموقع المجاني اللي هيرسم لو جوجل رفض
+    safe_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed=42&nologo=true"
+    r = requests.get(url, timeout=60)
+    if r.status_code == 200:
+        with open("image.png", "wb") as f:
+            f.write(r.content)
+        return True
+    return False
+
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, "اهلا يا سامح! انا اهو معاك، اسألني اي حاجة وهرد عليك كتابة وصوت، ولو قولت ارسملي هبعتلك صورة")
@@ -52,6 +63,8 @@ def ai_reply(message):
         bot.send_chat_action(message.chat.id, 'upload_photo')
         bot.reply_to(message, "تمام يا معلم، برسمهالك دلوقتي... 🎨")
         img_done = False
+
+        # 1. يجرب جوجل الاول
         for img_model in IMAGE_MODELS:
             try:
                 response = client.models.generate_content(
@@ -72,8 +85,20 @@ def ai_reply(message):
             except Exception as e:
                 print(f"Image model {img_model} failed: {e}")
                 continue
+
+        # 2. لو جوجل فشل، يرسم من الموقع المجاني
         if not img_done:
-            bot.reply_to(message, "يا غالي موديل الصور مش متاح على المفتاح ده دلوقتي، جرب كمان شوية")
+            try:
+                print("Trying Pollinations fallback...")
+                if make_image_pollinations(text):
+                    with open("image.png", "rb") as photo:
+                        bot.send_photo(message.chat.id, photo, caption="خلصت يا غالي، ايه رايك؟ 😍")
+                    img_done = True
+            except Exception as e:
+                print(f"Pollinations failed: {e}")
+
+        if not img_done:
+            bot.reply_to(message, "يا غالي معرفتش ارسمها دلوقتي، جرب توصفها بطريقة تانية")
         return
 
     # لو كلام عادي - كتابة + صوت
@@ -97,13 +122,10 @@ def ai_reply(message):
 
     bot.reply_to(message, reply_text)
 
-    # الصوت - يجرب صوت الراجل المصري الاول، لو فشل يجرب الصوت القديم
     try:
         bot.send_chat_action(message.chat.id, 'record_voice')
         try:
-            print("Trying edge-tts male voice...")
             make_voice_edge(reply_text[:1000])
-            print("Edge-tts success")
         except Exception as e:
             print(f"Edge failed, fallback to gTTS: {e}")
             make_voice_gtts(reply_text[:1000])
