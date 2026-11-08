@@ -1,8 +1,9 @@
 import os
 import io
+import asyncio
 import telebot
+import edge_tts
 from google import genai
-from gtts import gTTS
 from PIL import Image
 from google.genai import types
 
@@ -12,27 +13,31 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_KEY)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# دي الشخصية اللي هتثبت عليه
 SYSTEM_PROMPT = """
 انت بوت اسمه "بوت سامح الجديد"، صاحبك مصري جدع.
 كلم سامح دايما بالعامية المصرية، زي "يا غالي، يا معلم، من عيوني، أهو".
 ردك يكون قصير، خفيف، ودمك خفيف، ومتتكلمش فصحى خالص.
-لو قالك مساء الخير، رد عليه مصري زي "مساء الفل يا غالي، عامل ايه؟"
 """
 
 TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
 IMAGE_MODEL = "gemini-3-pro-image-preview"
 IMAGE_WORDS = ["ارسم", "ارسملي", "صورة", "صوره", "تخيل", "اعملي", "رسم", "image", "draw", "picture"]
 
+# ده صوت راجل مصري - سالم
+VOICE = "ar-EG-SalimNeural"
+
+async def make_voice(text):
+    communicate = edge_tts.Communicate(text, VOICE)
+    await communicate.save("voice.mp3")
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "اهلا يا سامح! انا بوتك المصري، اسألني اي حاجة وهرد عليك كتابة وصوت")
+    bot.reply_to(message, "اهلا يا سامح! انا بوتك المصري، اسألني اي حاجة وهرد عليك كتابة وصوت راجل")
 
 @bot.message_handler(func=lambda m: True)
 def ai_reply(message):
     text = message.text
 
-    # لو طلب صورة
     if any(word in text.lower() for word in IMAGE_WORDS):
         bot.send_chat_action(message.chat.id, 'upload_photo')
         bot.reply_to(message, "تمام يا معلم، برسمهالك دلوقتي... 🎨")
@@ -53,7 +58,6 @@ def ai_reply(message):
             bot.reply_to(message, f"توليد الصور مش متاح دلوقتي. الخطأ: {e}")
         return
 
-    # كلام عادي - كتابة + صوت
     bot.send_chat_action(message.chat.id, 'typing')
     reply_text = ""
     for model_name in TEXT_MODELS:
@@ -75,11 +79,10 @@ def ai_reply(message):
     bot.reply_to(message, reply_text)
     try:
         bot.send_chat_action(message.chat.id, 'record_voice')
-        tts = gTTS(text=reply_text[:4000], lang='ar', slow=False)
-        tts.save("voice.mp3")
+        asyncio.run(make_voice(reply_text[:4000]))
         with open("voice.mp3", "rb") as voice_file:
             bot.send_voice(message.chat.id, voice_file)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Voice error: {e}")
 
 bot.polling(none_stop=True, timeout=60)
