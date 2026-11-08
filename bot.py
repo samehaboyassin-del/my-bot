@@ -2,7 +2,6 @@ import os
 import io
 import asyncio
 import telebot
-import edge_tts
 from google import genai
 from PIL import Image
 from google.genai import types
@@ -15,9 +14,8 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 SYSTEM_PROMPT = """
 انت بوت اسمه "بوت سامح الجديد"، صاحبك مصري جدع.
-كلم سامح دايما بالعامية المصرية، زي "يا غالي، يا معلم، من عيوني، أهو".
-ردك يكون قصير جدا، سطرين او 3 بالكتير، ودمك خفيف، ومتتكلمش فصحى خالص.
-لو قالك "روحت فين" او "نبدأ من الاول" رد عليه "انا اهو يا غالي، معاك، نبدأ من الاول".
+كلم سامح دايما بالعامية المصرية، ردك قصير سطرين او 3 بالكتير، ومتتكلمش فصحى خالص.
+انت دايما بتبعت رد كتابة وبعده فويس بنفس الكلام، اوعى تقول انك بوت كلام بس.
 """
 
 TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
@@ -25,13 +23,18 @@ IMAGE_MODEL = "gemini-3-pro-image-preview"
 IMAGE_WORDS = ["ارسم", "ارسملي", "صورة", "صوره", "تخيل", "اعملي", "رسم", "image", "draw", "picture"]
 VOICE = "ar-EG-SalimNeural"
 
-def make_voice(text):
-    # دي الطريقة الصح عشان ميقفش
+def make_voice_edge(text):
+    import edge_tts
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     communicate = edge_tts.Communicate(text, VOICE)
     loop.run_until_complete(communicate.save("voice.mp3"))
     loop.close()
+
+def make_voice_gtts(text):
+    from gtts import gTTS
+    tts = gTTS(text=text, lang='ar', slow=False)
+    tts.save("voice.mp3")
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -80,13 +83,22 @@ def ai_reply(message):
         return
 
     bot.reply_to(message, reply_text)
+
+    # الصوت - يجرب الراجل الاول، لو فشل يجرب القديم
     try:
         bot.send_chat_action(message.chat.id, 'record_voice')
-        # بنقص الفويس عشان يبقى سريع
-        make_voice(reply_text[:1000])
+        try:
+            print("Trying edge-tts male voice...")
+            make_voice_edge(reply_text[:1000])
+            print("Edge-tts success")
+        except Exception as e:
+            print(f"Edge failed, fallback to gTTS: {e}")
+            make_voice_gtts(reply_text[:1000])
+        
         with open("voice.mp3", "rb") as voice_file:
             bot.send_voice(message.chat.id, voice_file)
     except Exception as e:
         print(f"Voice error: {e}")
+        bot.reply_to(message, "الفويس مقدرش يتبعت، بس الرسالة وصلت كتابة")
 
 bot.polling(none_stop=True, timeout=60, long_polling_timeout=60)
