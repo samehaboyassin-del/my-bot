@@ -16,23 +16,26 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 SYSTEM_PROMPT = """
 انت بوت اسمه "بوت سامح الجديد"، صاحبك مصري جدع.
 كلم سامح دايما بالعامية المصرية، زي "يا غالي، يا معلم، من عيوني، أهو".
-ردك يكون قصير، خفيف، ودمك خفيف، ومتتكلمش فصحى خالص.
+ردك يكون قصير جدا، سطرين او 3 بالكتير، ودمك خفيف، ومتتكلمش فصحى خالص.
+لو قالك "روحت فين" او "نبدأ من الاول" رد عليه "انا اهو يا غالي، معاك، نبدأ من الاول".
 """
 
 TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
 IMAGE_MODEL = "gemini-3-pro-image-preview"
 IMAGE_WORDS = ["ارسم", "ارسملي", "صورة", "صوره", "تخيل", "اعملي", "رسم", "image", "draw", "picture"]
-
-# ده صوت راجل مصري - سالم
 VOICE = "ar-EG-SalimNeural"
 
-async def make_voice(text):
+def make_voice(text):
+    # دي الطريقة الصح عشان ميقفش
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     communicate = edge_tts.Communicate(text, VOICE)
-    await communicate.save("voice.mp3")
+    loop.run_until_complete(communicate.save("voice.mp3"))
+    loop.close()
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "اهلا يا سامح! انا بوتك المصري، اسألني اي حاجة وهرد عليك كتابة وصوت راجل")
+    bot.reply_to(message, "اهلا يا سامح! انا اهو معاك، اسألني اي حاجة")
 
 @bot.message_handler(func=lambda m: True)
 def ai_reply(message):
@@ -73,16 +76,17 @@ def ai_reply(message):
             continue
 
     if not reply_text:
-        bot.reply_to(message, "جوجل زحمة دلوقتي يا غالي، جرب تاني بعد دقيقة.")
+        bot.reply_to(message, "انا اهو يا غالي، معاك، جوجل بس كانت زحمة، جرب تاني.")
         return
 
     bot.reply_to(message, reply_text)
     try:
         bot.send_chat_action(message.chat.id, 'record_voice')
-        asyncio.run(make_voice(reply_text[:4000]))
+        # بنقص الفويس عشان يبقى سريع
+        make_voice(reply_text[:1000])
         with open("voice.mp3", "rb") as voice_file:
             bot.send_voice(message.chat.id, voice_file)
     except Exception as e:
         print(f"Voice error: {e}")
 
-bot.polling(none_stop=True, timeout=60)
+bot.polling(none_stop=True, timeout=60, long_polling_timeout=60)
