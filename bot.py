@@ -9,17 +9,20 @@ from google.genai import types
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-client = genai.Client(api_key=GEMINI_KEY)
+# بنستخدم v1beta عشان موديل الصور يشتغل
+client = genai.Client(api_key=GEMINI_KEY, http_options=types.HttpOptions(api_version="v1beta"))
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 SYSTEM_PROMPT = """
 انت بوت اسمه "بوت سامح الجديد"، صاحبك مصري جدع.
-كلم سامح دايما بالعامية المصرية، ردك قصير سطرين او 3 بالكتير، ومتتكلمش فصحى خالص.
+كلم سامح دايما بالعامية المصرية، زي "يا غالي، يا معلم، من عيوني، أهو".
+ردك يكون قصير جدا، سطرين او 3 بالكتير، ودمك خفيف، ومتتكلمش فصحى خالص.
 انت دايما بتبعت رد كتابة وبعده فويس بنفس الكلام، اوعى تقول انك بوت كلام بس.
+لو قالك "روحت فين" او "نبدأ من الاول" رد عليه "انا اهو يا غالي، معاك، نبدأ من الاول".
 """
 
 TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview"]
-IMAGE_MODEL = "gemini-3-pro-image-preview"
+IMAGE_MODELS = ["gemini-3-pro-image-preview", "gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"]
 IMAGE_WORDS = ["ارسم", "ارسملي", "صورة", "صوره", "تخيل", "اعملي", "رسم", "image", "draw", "picture"]
 VOICE = "ar-EG-SalimNeural"
 
@@ -38,32 +41,42 @@ def make_voice_gtts(text):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "اهلا يا سامح! انا اهو معاك، اسألني اي حاجة")
+    bot.reply_to(message, "اهلا يا سامح! انا اهو معاك، اسألني اي حاجة وهرد عليك كتابة وصوت، ولو قولت ارسملي هبعتلك صورة")
 
 @bot.message_handler(func=lambda m: True)
 def ai_reply(message):
     text = message.text
 
+    # لو طلب صورة
     if any(word in text.lower() for word in IMAGE_WORDS):
         bot.send_chat_action(message.chat.id, 'upload_photo')
         bot.reply_to(message, "تمام يا معلم، برسمهالك دلوقتي... 🎨")
-        try:
-            response = client.models.generate_content(
-                model=IMAGE_MODEL,
-                contents=text,
-                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
-            )
-            for part in response.candidates[0].content.parts:
-                if part.inline_data:
-                    img = Image.open(io.BytesIO(part.inline_data.data))
-                    img.save("image.png")
-                    with open("image.png", "rb") as photo:
-                        bot.send_photo(message.chat.id, photo, caption="خلصت يا غالي، ايه رايك؟ 😍")
-                    return
-        except Exception as e:
-            bot.reply_to(message, f"توليد الصور مش متاح دلوقتي. الخطأ: {e}")
+        img_done = False
+        for img_model in IMAGE_MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=img_model,
+                    contents=text,
+                    config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+                )
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        img = Image.open(io.BytesIO(part.inline_data.data))
+                        img.save("image.png")
+                        with open("image.png", "rb") as photo:
+                            bot.send_photo(message.chat.id, photo, caption="خلصت يا غالي، ايه رايك؟ 😍")
+                        img_done = True
+                        break
+                if img_done:
+                    break
+            except Exception as e:
+                print(f"Image model {img_model} failed: {e}")
+                continue
+        if not img_done:
+            bot.reply_to(message, "يا غالي موديل الصور مش متاح على المفتاح ده دلوقتي، جرب كمان شوية")
         return
 
+    # لو كلام عادي - كتابة + صوت
     bot.send_chat_action(message.chat.id, 'typing')
     reply_text = ""
     for model_name in TEXT_MODELS:
@@ -84,7 +97,7 @@ def ai_reply(message):
 
     bot.reply_to(message, reply_text)
 
-    # الصوت - يجرب الراجل الاول، لو فشل يجرب القديم
+    # الصوت - يجرب صوت الراجل المصري الاول، لو فشل يجرب الصوت القديم
     try:
         bot.send_chat_action(message.chat.id, 'record_voice')
         try:
@@ -99,6 +112,5 @@ def ai_reply(message):
             bot.send_voice(message.chat.id, voice_file)
     except Exception as e:
         print(f"Voice error: {e}")
-        bot.reply_to(message, "الفويس مقدرش يتبعت، بس الرسالة وصلت كتابة")
 
 bot.polling(none_stop=True, timeout=60, long_polling_timeout=60)
