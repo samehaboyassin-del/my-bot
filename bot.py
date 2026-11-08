@@ -3,6 +3,7 @@ import io
 import asyncio
 import requests
 import urllib.parse
+import random
 import telebot
 from google import genai
 from PIL import Image
@@ -39,12 +40,31 @@ def make_voice_gtts(text):
     tts = gTTS(text=text, lang='ar', slow=False)
     tts.save("voice.mp3")
 
+def translate_to_english(arabic_prompt):
+    # بيترجم طلبك لانجليزي عشان موقع الصور يفهمه صح
+    try:
+        for model_name in TEXT_MODELS:
+            try:
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=f"Translate this image request to a detailed English image prompt, only output the English prompt, no Arabic: {arabic_prompt}"
+                )
+                if resp.text:
+                    return resp.text.strip()
+            except:
+                continue
+    except:
+        pass
+    return arabic_prompt
+
 def make_image_pollinations(prompt):
-    # ده الموقع المجاني اللي هيرسم لو جوجل رفض
-    safe_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed=42&nologo=true"
-    r = requests.get(url, timeout=60)
-    if r.status_code == 200:
+    english_prompt = translate_to_english(prompt)
+    print(f"Original: {prompt} -> English: {english_prompt}")
+    safe_prompt = urllib.parse.quote(english_prompt)
+    seed = random.randint(1, 999999)
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed={seed}&model=flux&nologo=true&enhance=true"
+    r = requests.get(url, timeout=90)
+    if r.status_code == 200 and len(r.content) > 10000:
         with open("image.png", "wb") as f:
             f.write(r.content)
         return True
@@ -58,13 +78,11 @@ def start(message):
 def ai_reply(message):
     text = message.text
 
-    # لو طلب صورة
     if any(word in text.lower() for word in IMAGE_WORDS):
         bot.send_chat_action(message.chat.id, 'upload_photo')
         bot.reply_to(message, "تمام يا معلم، برسمهالك دلوقتي... 🎨")
         img_done = False
 
-        # 1. يجرب جوجل الاول
         for img_model in IMAGE_MODELS:
             try:
                 response = client.models.generate_content(
@@ -86,10 +104,8 @@ def ai_reply(message):
                 print(f"Image model {img_model} failed: {e}")
                 continue
 
-        # 2. لو جوجل فشل، يرسم من الموقع المجاني
         if not img_done:
             try:
-                print("Trying Pollinations fallback...")
                 if make_image_pollinations(text):
                     with open("image.png", "rb") as photo:
                         bot.send_photo(message.chat.id, photo, caption="خلصت يا غالي، ايه رايك؟ 😍")
@@ -101,7 +117,6 @@ def ai_reply(message):
             bot.reply_to(message, "يا غالي معرفتش ارسمها دلوقتي، جرب توصفها بطريقة تانية")
         return
 
-    # لو كلام عادي - كتابة + صوت
     bot.send_chat_action(message.chat.id, 'typing')
     reply_text = ""
     for model_name in TEXT_MODELS:
@@ -129,7 +144,6 @@ def ai_reply(message):
         except Exception as e:
             print(f"Edge failed, fallback to gTTS: {e}")
             make_voice_gtts(reply_text[:1000])
-        
         with open("voice.mp3", "rb") as voice_file:
             bot.send_voice(message.chat.id, voice_file)
     except Exception as e:
